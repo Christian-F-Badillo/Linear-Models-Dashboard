@@ -4,7 +4,12 @@ from dash import Dash, dcc, html
 
 from utils import load_dataset
 
-app = Dash(__name__, use_pages=True, external_stylesheets=[dbc.themes.BOOTSTRAP])
+app = Dash(
+    __name__,
+    use_pages=True,
+    external_stylesheets=[dbc.themes.BOOTSTRAP],
+    suppress_callback_exceptions=True,
+)
 
 df = load_dataset()
 df_json = df.to_json(orient="split")
