@@ -2,7 +2,7 @@ import dash
 import dash_bootstrap_components as dbc
 from dash import Dash, dcc, html
 
-from utils import get_pca_dfs, load_dataset
+from .utils import get_pca_dfs, load_dataset, remove_outliers
 
 app = Dash(
     __name__,
@@ -12,6 +12,7 @@ app = Dash(
 )
 
 df = load_dataset()
+df = remove_outliers(df)
 df_pca_train, df_pca_val, df_pca_test = get_pca_dfs(df)
 
 df = df.to_json(orient="split")

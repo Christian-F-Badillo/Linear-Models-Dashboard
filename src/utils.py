@@ -3,12 +3,24 @@ from typing import Tuple
 import pandas as pd
 from sklearn.datasets import fetch_california_housing
 from sklearn.decomposition import PCA
+from sklearn.ensemble import IsolationForest
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 
 
 def load_dataset() -> pd.DataFrame:
     return fetch_california_housing(as_frame=True).frame
+
+
+def remove_outliers(df: pd.DataFrame, target="MedHouseVal", seed=42) -> pd.DataFrame:
+
+    model_outlier = IsolationForest(random_state=seed)
+    outlier_mask = (model_outlier.fit_predict(df.drop(columns=[target])) + 1) / 2
+    outlier_mask = outlier_mask.astype(bool)
+
+    df_clean = df.iloc[outlier_mask]
+
+    return df_clean
 
 
 def get_pca_dfs(
