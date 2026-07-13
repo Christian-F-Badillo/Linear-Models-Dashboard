@@ -9,7 +9,6 @@ import plotly.graph_objects as go
 from dash import Input, Output, callback, dash_table, dcc, html
 from dash.dash_table.Format import Format, Scheme, Trim
 from sklearn.decomposition import PCA
-from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 
 dash.register_page(__name__, path="/eda", name="Exploratory Data Analysis (EDA)")
@@ -17,7 +16,7 @@ dash.register_page(__name__, path="/eda", name="Exploratory Data Analysis (EDA)"
 layout = html.Div(
     [
         html.H1(
-            "\tExploratory Data Analysis",
+            "Exploratory Data Analysis",
             style={"text-weight": "bold", "text-align": "center"},
             className="text-2xl font-bold mb-4",
         ),
@@ -61,8 +60,7 @@ layout = html.Div(
                                 dbc.Row(
                                     [
                                         dcc.Dropdown(
-                                            value="MedInc",
-                                            placeholder="Regressor",
+                                            placeholder="Select a Variable ...",
                                             id="dropdown-scatterplot",
                                         )
                                     ]
@@ -272,6 +270,9 @@ def plot_scatter(json_data, column):
     df = pd.DataFrame(
         data=data_dict["data"], columns=data_dict["columns"], index=data_dict["index"]
     )
+
+    if column is None:
+        column = "MedInc"
 
     fig = px.scatter(
         data_frame=df,

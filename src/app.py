@@ -2,7 +2,7 @@ import dash
 import dash_bootstrap_components as dbc
 from dash import Dash, dcc, html
 
-from utils import load_dataset
+from utils import get_pca_dfs, load_dataset
 
 app = Dash(
     __name__,
@@ -12,27 +12,37 @@ app = Dash(
 )
 
 df = load_dataset()
-df_json = df.to_json(orient="split")
+df_pca_train, df_pca_val, df_pca_test = get_pca_dfs(df)
+
+df = df.to_json(orient="split")
+df_pca_train = df_pca_train.to_json(orient="split")
+df_pca_val = df_pca_val.to_json(orient="split")
+df_pca_test = df_pca_test.to_json(orient="split")
+
+
+navbar = dbc.NavbarSimple(
+    children=[
+        dbc.NavItem(
+            dbc.NavLink(f"{page['name']}", href=page["relative_path"], active="exact")
+        )
+        for page in dash.page_registry.values()
+    ],
+    brand="Linear Models Dashboard",
+    brand_href="/",
+    color="dark",
+    dark=True,
+    fluid=True,
+    className="mb-4",
+)
 
 app.layout = html.Div(
     [
-        dcc.Store(id="global-df-store", data=df_json, storage_type="memory"),
-        html.Header(
-            [
-                html.Nav(
-                    [
-                        dcc.Link(
-                            f"{page['name']}",
-                            href=page["relative_path"],
-                            className="nav-link",
-                        )
-                        for page in dash.page_registry.values()
-                    ],
-                    className="navbar",
-                )
-            ]
-        ),
-        dash.page_container,
+        dcc.Store(id="global-df-store", data=df, storage_type="memory"),
+        dcc.Store(id="global-pca-train", data=df_pca_train, storage_type="memory"),
+        dcc.Store(id="global-pca-val", data=df_pca_val, storage_type="memory"),
+        dcc.Store(id="global-pca-test", data=df_pca_test, storage_type="memory"),
+        navbar,
+        dbc.Container([dash.page_container], fluid=True),
     ]
 )
 
