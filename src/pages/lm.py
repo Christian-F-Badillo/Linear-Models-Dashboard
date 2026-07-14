@@ -6,6 +6,7 @@ import pandas as pd
 from dash import Input, Output, callback, dcc, html
 
 from src.models.linear import make_linear_regression_layout
+from src.models.poly import make_polynomial_regression_layout
 
 dash.register_page(__name__, path="/linear-models", name="Linear Model Estimation")
 
@@ -24,6 +25,7 @@ layout = html.Div(
                             options=[
                                 {"label": "Linear Regression (Ridge)", "value": 0},
                                 {"label": "Bayesian Linear Regression", "value": 1},
+                                {"label": "Polynomial Regression (GAM)", "value": 2},
                             ],
                             value=0,
                             placeholder="Select a Model ...",
@@ -70,5 +72,7 @@ def fit_model(df_json_train, df_json_val, df_json_test, model_type):
     match model_type:
         case 0:
             return make_linear_regression_layout(df_train, df_val, df_test)
+        case 2:
+            return make_polynomial_regression_layout(df_train, df_val, df_test)
         case _:
-            return dbc.Container([html.P("Select a Model ...")])
+            return dbc.Container([html.P("")])

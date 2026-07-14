@@ -1,17 +1,21 @@
-from typing import Any, List, Tuple
+from typing import Any, Dict, List, Tuple
 
 import dash_bootstrap_components as dbc
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
-from dash import dcc
-from dash.html import Data
+from dash import dcc, html
 from plotly.subplots import make_subplots
 from sklearn.linear_model import Ridge
-from sklearn.metrics import mean_squared_error
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
 
-def fit_ridge_cv(df_train: pd.DataFrame, df_val: np.ndarray) -> Tuple[List[Any]]:
+def fit_ridge_cv(
+    df_train: pd.DataFrame, df_val: np.ndarray, df_test: pd.DataFrame
+) -> Tuple[List[Any]]:
+
+    metric_dict = {"r2": {}, "rmse": {}, "mae": {}}
+
     feature_cols = [c for c in df_train.columns if c != "target"]
 
     X_train = df_train[feature_cols].values
@@ -19,6 +23,9 @@ def fit_ridge_cv(df_train: pd.DataFrame, df_val: np.ndarray) -> Tuple[List[Any]]
 
     X_val = df_val[feature_cols].values
     y_val = df_val["target"].values
+
+    X_test = df_test[feature_cols].values
+    y_test = df_test["target"].values
 
     alphas = np.logspace(-3, 3, 20)
     train_errors = np.zeros(shape=(alphas.size,))
@@ -37,10 +44,33 @@ def fit_ridge_cv(df_train: pd.DataFrame, df_val: np.ndarray) -> Tuple[List[Any]]
         coefs_by_alpha[i, 0] = model.intercept_
         coefs_by_alpha[i, 1:] = model.coef_
 
-    return train_errors, val_errors, coefs_by_alpha, alphas
+    best_alpha_arg = np.argmin(val_errors)
+
+    best_model = Ridge(alpha=alphas[best_alpha_arg])
+    best_model.fit(X_train, y_train)
+
+    y_pred_val = best_model.predict(X_val)
+    r2_val = r2_score(y_val, y_pred_val)
+    rmse_val = np.sqrt(mean_squared_error(y_val, y_pred_val))
+    mae_val = mean_absolute_error(y_val, y_pred_val)
+
+    # 3. Computas las métricas sobre el conjunto de PRUEBA (Test)
+    y_pred_test = best_model.predict(X_test)
+    r2_test = r2_score(y_test, y_pred_test)
+    rmse_test = np.sqrt(mean_squared_error(y_test, y_pred_test))
+    mae_test = mean_absolute_error(y_test, y_pred_test)
+
+    metric_dict["r2"]["val"] = r2_val
+    metric_dict["r2"]["test"] = r2_test
+    metric_dict["mae"]["val"] = mae_val
+    metric_dict["mae"]["test"] = mae_test
+    metric_dict["rmse"]["val"] = rmse_val
+    metric_dict["rmse"]["test"] = rmse_test
+
+    return train_errors, val_errors, coefs_by_alpha, alphas, metric_dict
 
 
-def plot_fit_train(df: pd.DataFrame, x_support: List[Any], preds: List[Any]):
+def plot_fit(df: pd.DataFrame, x_support: List[Any], preds: List[Any]):
     y = df["target"].to_numpy()
 
     combinations = [
@@ -83,7 +113,9 @@ def plot_fit_train(df: pd.DataFrame, x_support: List[Any], preds: List[Any]):
         fig.update_xaxes(title_text=x_axis, row=row, col=col)
         fig.update_yaxes(title_text="MedHouseVal", row=row, col=col)
 
-    fig.update_layout(title_text="Training Model Fit", height=650, showlegend=True)
+    fig.update_layout(
+        title_text="Test Data vs Best Model Fit", height=650, showlegend=True
+    )
 
     return fig
 
@@ -120,7 +152,7 @@ def plot_cv_score(
     )
 
     fig.update_xaxes(title_text="Alpha")
-    fig.update_yaxes(title_text=f"{score}", range=[0.5, 1])
+    fig.update_yaxes(title_text=f"{score}")
 
     return fig
 
@@ -153,13 +185,106 @@ def plot_test_predictions(df_test: pd.DataFrame, coefs: np.ndarray):
     return fig
 
 
+def plot_coef_cv(coefs: np.ndarray, alphas: np.ndarray):
+
+    num_traces, num_vars = coefs.shape
+    coefs = coefs.T
+
+    fig = go.Figure()
+
+    for i in range(1, num_vars):
+        fig.add_trace(
+            go.Scatter(
+                y=coefs[i,],
+                x=alphas,
+                mode="markers+lines",
+                name=f"Coefficient {i}",
+                marker=dict(size=7, opacity=0.7, symbol="circle"),
+            )
+        )
+
+    fig.update_layout(
+        title_text="Parameters vs Alpha",
+        height=650,
+        showlegend=True,
+    )
+
+    fig.update_xaxes(title_text="Alpha")
+    fig.update_yaxes(title_text="Parameter Value")
+
+    return fig
+
+
+def make_metrics_table(metrics: Dict[str, Dict[str, float]]):
+
+    r2_val, rmse_val, mae_val = (
+        metrics["r2"]["val"],
+        metrics["rmse"]["val"],
+        metrics["mae"]["val"],
+    )
+    r2_test, rmse_test, mae_test = (
+        metrics["r2"]["test"],
+        metrics["rmse"]["test"],
+        metrics["mae"]["test"],
+    )
+
+    header = html.Thead(
+        html.Tr(
+            [
+                html.Th("Metric", className="text-start"),
+                html.Th("Validation Set (CV)", className="text-center"),
+                html.Th("Test Set (Generalization)", className="text-center"),
+            ],
+            className="table-dark",
+        )
+    )
+
+    body = html.Tbody(
+        [
+            html.Tr(
+                [
+                    html.Td(html.B("R²"), className="text-start"),
+                    html.Td(f"{r2_val:.4f}", className="text-center text-muted"),
+                    html.Td(
+                        html.B(f"{r2_test:.4f}"), className="text-center"
+                    ),  # Negrita para resaltar el test real
+                ]
+            ),
+            html.Tr(
+                [
+                    html.Td(html.B("RMSE"), className="text-start"),
+                    html.Td(f"{rmse_val:.4f}", className="text-center text-muted"),
+                    html.Td(html.B(f"{rmse_test:.4f}"), className="text-center"),
+                ]
+            ),
+            html.Tr(
+                [
+                    html.Td(html.B("MAE"), className="text-start"),
+                    html.Td(f"{mae_val:.4f}", className="text-center text-muted"),
+                    html.Td(html.B(f"{mae_test:.4f}"), className="text-center"),
+                ]
+            ),
+        ]
+    )
+
+    return dbc.Table(
+        [header, body],
+        bordered=True,
+        hover=True,
+        responsive=True,
+        striped=True,
+        size="sm",
+        className="shadow-sm mt-3",
+    )
+
+
 def make_linear_regression_layout(
     df_train: pd.DataFrame, df_val: pd.DataFrame, df_test: pd.DataFrame
 ) -> dbc.Container:
     X = df_train.drop(columns=["target"]).to_numpy()
 
-    train_errors, val_errors, coef_by_alpha, alphas = fit_ridge_cv(
-        df_train=df_train, df_val=df_val
+    train_errors, val_errors, coef_by_alpha, alphas, metrics = fit_ridge_cv(
+        df_train=df_train, df_val=df_val, df_test=df_test
     )
 
     best_fit = np.argmin(val_errors)
@@ -170,19 +295,27 @@ def make_linear_regression_layout(
         for i in range(4)
     ]
 
-    fig1 = plot_fit_train(df_train, x_support=x_support, preds=preds)
+    fig1 = plot_fit(df_test, x_support=x_support, preds=preds)
     fig2 = plot_cv_score(
         score_train=train_errors, score_val=val_errors, alphas=alphas, score="RMSE"
     )
     fig3 = plot_test_predictions(df_test=df_test, coefs=coef_by_alpha[best_fit, :])
+    fig4 = plot_coef_cv(coefs=coef_by_alpha, alphas=alphas)
+    table_html = make_metrics_table(metrics=metrics)
 
     return dbc.Container(
         [
-            dbc.Row([dcc.Graph(figure=fig1)]),
+            dbc.Row(
+                [
+                    dbc.Col([dcc.Graph(figure=fig1)], md=6),
+                    dbc.Col([dcc.Graph(figure=fig4)], md=6),
+                ]
+            ),
             dbc.Row(
                 [
                     dbc.Col([dcc.Graph(figure=fig2)], md=4),
                     dbc.Col([dcc.Graph(figure=fig3)], md=4),
+                    dbc.Col([table_html], md=4),
                 ]
             ),
         ],
