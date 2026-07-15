@@ -5,6 +5,7 @@ import dash_bootstrap_components as dbc
 import pandas as pd
 from dash import Input, Output, callback, dcc, html
 
+from src.models.knn import make_knn_regression_layout
 from src.models.linear import make_linear_regression_layout
 from src.models.poly import make_polynomial_regression_layout
 
@@ -24,10 +25,10 @@ layout = html.Div(
                         dcc.Dropdown(
                             options=[
                                 {"label": "Linear Regression (Ridge)", "value": 0},
-                                {"label": "Bayesian Linear Regression", "value": 1},
+                                {"label": "K Nearest-Neighbor Regression", "value": 1},
                                 {"label": "Polynomial Regression (GAM)", "value": 2},
                             ],
-                            value=0,
+                            value=1,
                             placeholder="Select a Model ...",
                             id="dropdown-model-selector",
                         )
@@ -72,6 +73,8 @@ def fit_model(df_json_train, df_json_val, df_json_test, model_type):
     match model_type:
         case 0:
             return make_linear_regression_layout(df_train, df_val, df_test)
+        case 1:
+            return make_knn_regression_layout(df_train, df_val, df_test)
         case 2:
             return make_polynomial_regression_layout(df_train, df_val, df_test)
         case _:

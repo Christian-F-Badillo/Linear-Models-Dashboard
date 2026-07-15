@@ -1,4 +1,3 @@
-from operator import index
 from typing import Any, Dict, List, Tuple
 
 import dash_bootstrap_components as dbc
@@ -8,7 +7,7 @@ import plotly.graph_objects as go
 from dash import dcc, html
 from plotly.subplots import make_subplots
 from sklearn.linear_model import Ridge
-from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+from sklearn.metrics import mean_absolute_error, mean_squared_error
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import FunctionTransformer, StandardScaler
 
@@ -239,13 +238,26 @@ def plot_cv_score(
 
 def plot_test_predictions(y_true: np.ndarray, y_pred: np.ndarray):
 
+    line_plot = np.arange(0, 5, 0.5)
     fig = go.Figure()
     fig.add_trace(
-        go.Scatter(
+        go.Scattergl(
             x=y_pred,
             y=y_true,
-            mode="markers",
+            mode="lines",
             name="",
+            showlegend=False,
+            marker=dict(size=7, opacity=0.7, symbol="diamond"),
+        )
+    )
+
+    fig.add_trace(
+        go.Scattergl(
+            x=line_plot,
+            y=line_plot,
+            mode="markers",
+            name="Ideal Fit",
+            showlegend=True,
             marker=dict(size=7, opacity=0.7, symbol="diamond"),
         )
     )
@@ -253,7 +265,7 @@ def plot_test_predictions(y_true: np.ndarray, y_pred: np.ndarray):
     fig.update_layout(
         title_text="Test vs Model Prediction",
         height=650,
-        showlegend=False,
+        showlegend=True,
     )
 
     fig.update_xaxes(title_text="Model Prediction")
