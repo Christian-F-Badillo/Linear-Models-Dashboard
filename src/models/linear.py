@@ -162,6 +162,7 @@ def plot_test_predictions(df_test: pd.DataFrame, coefs: np.ndarray):
     y_true = df_test["target"]
     preds = coefs[0] + (X @ coefs[1:])
 
+    line_plot = np.arange(0, 5, 0.5)
     fig = go.Figure()
     fig.add_trace(
         go.Scatter(
@@ -169,6 +170,17 @@ def plot_test_predictions(df_test: pd.DataFrame, coefs: np.ndarray):
             y=y_true,
             mode="markers",
             name="",
+            marker=dict(size=7, opacity=0.7, symbol="diamond"),
+        )
+    )
+
+    fig.add_trace(
+        go.Scattergl(
+            x=line_plot,
+            y=line_plot,
+            mode="markers+lines",
+            name="Ideal Fit",
+            showlegend=True,
             marker=dict(size=7, opacity=0.7, symbol="diamond"),
         )
     )

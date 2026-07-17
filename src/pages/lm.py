@@ -28,7 +28,7 @@ layout = html.Div(
                                 {"label": "K Nearest-Neighbor Regression", "value": 1},
                                 {"label": "Polynomial Regression (GAM)", "value": 2},
                             ],
-                            value=1,
+                            value=0,
                             placeholder="Select a Model ...",
                             id="dropdown-model-selector",
                         )

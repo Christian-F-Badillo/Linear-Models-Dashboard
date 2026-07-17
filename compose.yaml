@@ -1,0 +1,13 @@
+services:
+  dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: linear-models-dashboard:latest
+    ports:
+      - "8050:8050"
+    environment:
+      - DASH_HOST=0.0.0.0
+      - DASH_PORT=8050
+      - DASH_DEBUG=False
+    restart: unless-stopped

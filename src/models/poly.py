@@ -244,7 +244,7 @@ def plot_test_predictions(y_true: np.ndarray, y_pred: np.ndarray):
         go.Scattergl(
             x=y_pred,
             y=y_true,
-            mode="lines",
+            mode="markers",
             name="",
             showlegend=False,
             marker=dict(size=7, opacity=0.7, symbol="diamond"),
@@ -255,7 +255,7 @@ def plot_test_predictions(y_true: np.ndarray, y_pred: np.ndarray):
         go.Scattergl(
             x=line_plot,
             y=line_plot,
-            mode="markers",
+            mode="markers+lines",
             name="Ideal Fit",
             showlegend=True,
             marker=dict(size=7, opacity=0.7, symbol="diamond"),
