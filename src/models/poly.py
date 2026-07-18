@@ -1,11 +1,7 @@
 from typing import Any, Dict, List, Tuple
 
-import dash_bootstrap_components as dbc
 import numpy as np
 import pandas as pd
-import plotly.graph_objects as go
-from dash import dcc, html
-from plotly.subplots import make_subplots
 from sklearn.linear_model import Ridge
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 from sklearn.pipeline import Pipeline
@@ -42,8 +38,6 @@ def fit_poly_ridge_cv(
     # Evaluation Arrays Initialization
     train_errors = np.zeros(shape=(degrees_k.size, alphas.size))
     val_errors = np.zeros(shape=(degrees_k.size, alphas.size))
-    # Metric Dict
-    metric_dict = {"rmse": {}, "mae": {}}
 
     # Parameter Tensor
     coefs = np.full((degrees_k.size, alphas.size, 17), np.nan)
@@ -90,32 +84,21 @@ def fit_poly_ridge_cv(
             num_coefs = k * len(feature_cols)
             coefs[i, j, 1 : (num_coefs + 1)] = ridge_model.coef_
 
-    # Get the optimal parameters
-    idx_k_opt, idx_alpha_opt = np.unravel_index(np.argmin(val_errors), val_errors.shape)
-    k_opt = degrees_k[idx_k_opt]
-    alpha_opt = alphas[idx_alpha_opt]
-    best_params = {"k": k_opt, "alpha": alpha_opt}
+    best_params = get_best_params(grid_param, val_errors)
 
-    # Fit the best model
-    model_poly.set_params(poly_feat_mat__kw_args={"degree": k_opt})
-    model_poly.set_params(ridge_reg__alpha=alpha_opt)
+    # Train the best model
+    model_poly.set_params(poly_feat_mat__kw_args={"degree": best_params["k"]})
+    model_poly.set_params(ridge_reg__alpha=best_params["alpha"])
     model_poly.fit(X_train, y_train)
 
-    # Best Model Evaluation
-    y_pred_val = model_poly.predict(X_val)
-    rmse_val = np.sqrt(mean_squared_error(y_val, y_pred_val))
-    mae_val = mean_absolute_error(y_val, y_pred_val)
-
-    # Test the Best Model against the Test Set
+    # Get model predictions
     y_pred_test = model_poly.predict(X_test)
-    rmse_test = np.sqrt(mean_squared_error(y_test, y_pred_test))
-    mae_test = mean_absolute_error(y_test, y_pred_test)
 
-    # Store the Metrics of the best Model
-    metric_dict["mae"]["val"] = mae_val
-    metric_dict["mae"]["test"] = mae_test
-    metric_dict["rmse"]["val"] = rmse_val
-    metric_dict["rmse"]["test"] = rmse_test
+    # Evaluate the best model
+    metric_dict = evaluate_model(model_poly, X_val, y_val, X_test, y_test)
+
+    # Get extra plotting info
+    info_plots = gen_plot_info(X_train, best_params, grid_param, coefs)
 
     return (
         train_errors,
@@ -125,281 +108,65 @@ def fit_poly_ridge_cv(
         metric_dict,
         best_params,
         y_pred_test,
+        info_plots,
     )
 
 
-def plot_fit(
-    df: pd.DataFrame, x_support: List[Any], coefs: np.ndarray, hyper_params: dict
+def get_best_params(grid_params: Dict[str, Any], errors: np.ndarray) -> Dict[str, Any]:
+
+    idx_k_opt, idx_alpha_opt = np.unravel_index(np.argmin(errors), errors.shape)
+    k_opt = grid_params["k"][idx_k_opt]
+    alpha_opt = grid_params["alpha"][idx_alpha_opt]
+    best_params = {"k": k_opt, "alpha": alpha_opt}
+
+    return best_params
+
+
+def gen_plot_info(
+    X_train: np.ndarray, best_params: dict, grid_param: dict, coefs: np.ndarray
 ):
-    y = df["target"].to_numpy()
+    x_support = [
+        np.linspace(np.min(X_train[:, i]), np.max(X_train[:, i]), 100) for i in range(4)
+    ]
+    K = best_params["k"]
 
-    K = hyper_params["k"]
-    intercept = coefs[0]
-
-    betas_full = coefs[1:]
-
-    combinations = ["PC1", "PC2", "PC3", "PC4"]
-
-    fig = make_subplots(rows=2, cols=2, shared_xaxes=False, shared_yaxes=False)
-
-    for i, x_axis in enumerate(combinations):
-        col = i % 2 + 1
-        row = i // 2 + 1
-
-        X_poly_local = np.vstack([x_support[i] ** d for d in range(1, K + 1)]).T
-
-        betas_pc = betas_full[i::4][:K]
-
-        preds = X_poly_local @ betas_pc + intercept
-
-        fig.add_trace(
-            go.Scattergl(
-                x=df[x_axis],
-                y=y,
-                mode="markers",
-                legendgroup="data",
-                showlegend=True,
-                name=f"PC{i + 1} projection data",
-                marker=dict(size=6, opacity=0.7),
-            ),
-            col=col,
-            row=row,
-        )
-        fig.add_trace(
-            go.Scattergl(
-                x=x_support[i],
-                y=preds,
-                legendgroup="model",
-                showlegend=(i == 0),
-                name="Best Model Fit",
-                marker=dict(size=14, opacity=1, color="red"),
-            ),
-            col=col,
-            row=row,
-        )
-        fig.update_xaxes(title_text=x_axis, row=row, col=col)
-        fig.update_yaxes(title_text="MedHouseVal", row=row, col=col, range=[-0.1, 5.1])
-
-    fig.update_layout(
-        title_text="Test Data vs Best Model Fit", height=650, showlegend=True
-    )
-
-    return fig
-
-
-def plot_cv_score(
-    score_train: np.ndarray, score_val: np.ndarray, param_grid: Dict[str, Any]
-):
-    alphas_str = [f"{a:.2e}" for a in param_grid["alpha"]]
-    k_str = [f"{k}" for k in param_grid["k"]]
-
-    fig = make_subplots(
-        rows=2,
-        cols=1,
-        subplot_titles=("Train Error CV", "Val Error CV"),
-        shared_xaxes=True,
-        shared_yaxes=True,
-    )
-
-    fig.add_trace(
-        go.Heatmap(
-            z=score_train,
-            y=k_str,
-            x=alphas_str,
-            colorscale="Viridis",
-            colorbar=dict(title="RMSE"),
-        ),
-        row=1,
-        col=1,
-    )
-    fig.add_trace(
-        go.Heatmap(
-            z=score_val,
-            y=k_str,
-            x=alphas_str,
-            colorscale="Viridis",
-            colorbar=dict(title="RMSE"),
-        ),
-        row=2,
-        col=1,
-    )
-
-    fig.update_layout(
-        title_text="Cross Validation Analysis",
-        height=650,
-        showlegend=True,
-    )
-
-    fig.update_xaxes(title_text="Alpha")
-    fig.update_yaxes(title_text="Degree")
-
-    return fig
-
-
-def plot_test_predictions(y_true: np.ndarray, y_pred: np.ndarray):
-
-    line_plot = np.arange(0, 5, 0.5)
-    fig = go.Figure()
-    fig.add_trace(
-        go.Scattergl(
-            x=y_pred,
-            y=y_true,
-            mode="markers",
-            name="",
-            showlegend=False,
-            marker=dict(size=7, opacity=0.7, symbol="diamond"),
-        )
-    )
-
-    fig.add_trace(
-        go.Scattergl(
-            x=line_plot,
-            y=line_plot,
-            mode="markers+lines",
-            name="Ideal Fit",
-            showlegend=True,
-            marker=dict(size=7, opacity=0.7, symbol="diamond"),
-        )
-    )
-
-    fig.update_layout(
-        title_text="Test vs Model Prediction",
-        height=650,
-        showlegend=True,
-    )
-
-    fig.update_xaxes(title_text="Model Prediction")
-    fig.update_yaxes(title_text="MedHouseVal")
-
-    return fig
-
-
-def plot_coef_cv(coefs: np.ndarray, alphas: np.ndarray, best_k: int):
-
-    num_traces, num_vars = coefs.shape
-    coefs = coefs.T
-
-    fig = go.Figure()
-
-    for i in range(1, num_vars):
-        fig.add_trace(
-            go.Scatter(
-                y=coefs[i,],
-                x=alphas,
-                mode="markers+lines",
-                name=f"Coefficient {i}",
-                marker=dict(size=7, opacity=0.7, symbol="circle"),
-            )
-        )
-
-    fig.update_layout(
-        title_text=f"Coefficients vs Alpha (Degree {best_k})",
-        height=650,
-        showlegend=True,
-    )
-
-    fig.update_xaxes(title_text="Alpha")
-    fig.update_yaxes(title_text="Value")
-
-    return fig
-
-
-def make_metrics_table(metrics: Dict[str, Dict[str, float]]):
-
-    rmse_val, mae_val = (
-        metrics["rmse"]["val"],
-        metrics["mae"]["val"],
-    )
-    rmse_test, mae_test = (
-        metrics["rmse"]["test"],
-        metrics["mae"]["test"],
-    )
-
-    header = html.Thead(
-        html.Tr(
-            [
-                html.Th("Metric", className="text-start"),
-                html.Th("Validation Set (CV)", className="text-center"),
-                html.Th("Test Set (Generalization)", className="text-center"),
-            ],
-            className="table-dark",
-        )
-    )
-
-    body = html.Tbody(
-        [
-            html.Tr(
-                [
-                    html.Td(html.B("RMSE"), className="text-start"),
-                    html.Td(f"{rmse_val:.4f}", className="text-center text-muted"),
-                    html.Td(html.B(f"{rmse_test:.4f}"), className="text-center"),
-                ]
-            ),
-            html.Tr(
-                [
-                    html.Td(html.B("MAE"), className="text-start"),
-                    html.Td(f"{mae_val:.4f}", className="text-center text-muted"),
-                    html.Td(html.B(f"{mae_test:.4f}"), className="text-center"),
-                ]
-            ),
-        ]
-    )
-
-    return dbc.Table(
-        [header, body],
-        bordered=True,
-        hover=True,
-        responsive=True,
-        striped=True,
-        size="sm",
-        className="shadow-sm mt-3",
-    )
-
-
-def make_polynomial_regression_layout(
-    df_train: pd.DataFrame, df_val: pd.DataFrame, df_test: pd.DataFrame
-) -> dbc.Container:
-    X = df_train.drop(columns=["target"]).to_numpy()
-
-    train_errors, val_errors, coefs, grid_params, metrics, best_params, test_preds = (
-        fit_poly_ridge_cv(df_train=df_train, df_val=df_val, df_test=df_test)
-    )
-
-    index_k = np.where(grid_params["k"] == best_params["k"])[0]
-    index_alpha = np.where(grid_params["alpha"] == best_params["alpha"])[0]
-
-    x_support = [np.linspace(np.min(X[:, i]), np.max(X[:, i]), 100) for i in range(4)]
+    index_k = np.where(grid_param["k"] == best_params["k"])[0]
+    index_alpha = np.where(grid_param["alpha"] == best_params["alpha"])[0]
     coefs_model = coefs[index_k.item(), index_alpha.item(), :]
 
-    fig1 = plot_fit(
-        df_test, x_support=x_support, coefs=coefs_model, hyper_params=best_params
-    )
-    fig2 = plot_cv_score(
-        score_train=train_errors, score_val=val_errors, param_grid=grid_params
-    )
-    fig3 = plot_test_predictions(y_true=df_test["target"].to_numpy(), y_pred=test_preds)
-    fig4 = plot_coef_cv(
-        coefs=coefs[index_k.item(), :, :],
-        alphas=grid_params["alpha"],
-        best_k=index_k.item() + 1,
-    )
-    table_html = make_metrics_table(metrics=metrics)
+    intercept = coefs_model[0]
+    betas_full = coefs_model[1:]
 
-    return dbc.Container(
-        [
-            dbc.Row(
-                [
-                    dbc.Col([dcc.Graph(figure=fig1)], md=6),
-                    dbc.Col([dcc.Graph(figure=fig2)], md=6),
-                ]
-            ),
-            dbc.Row(
-                [
-                    dbc.Col([dcc.Graph(figure=fig4)], md=5),
-                    dbc.Col([dcc.Graph(figure=fig3)], md=4),
-                    dbc.Col([table_html], md=3),
-                ]
-            ),
-        ],
-        fluid=True,
-    )
+    info_plots = {"pc_preds": []}
+
+    for i in range(4):
+        X_poly_local = np.vstack([x_support[i] ** d for d in range(1, K + 1)]).T
+        betas_pc = betas_full[i::4][:K]
+        preds: np.ndarray = X_poly_local @ betas_pc + intercept
+        info_plots["pc_preds"].append(preds)
+
+    return info_plots
+
+
+def evaluate_model(
+    model, X_val: np.ndarray, y_val: np.ndarray, X_test: np.ndarray, y_test: np.ndarray
+) -> Dict[str, Dict[str, Any]]:
+    metric_dict = {"rmse": {}, "mae": {}}
+
+    # Best Model Evaluation
+    y_pred_val = model.predict(X_val)
+    rmse_val = np.sqrt(mean_squared_error(y_val, y_pred_val))
+    mae_val = mean_absolute_error(y_val, y_pred_val)
+
+    # Test the Best Model against the Test Set
+    y_pred_test = model.predict(X_test)
+    rmse_test = np.sqrt(mean_squared_error(y_test, y_pred_test))
+    mae_test = mean_absolute_error(y_test, y_pred_test)
+
+    # Store the Metrics of the best Model
+    metric_dict["mae"]["val"] = mae_val
+    metric_dict["mae"]["test"] = mae_test
+    metric_dict["rmse"]["val"] = rmse_val
+    metric_dict["rmse"]["test"] = rmse_test
+
+    return metric_dict
