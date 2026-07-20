@@ -1,4 +1,4 @@
-import json
+from pathlib import Path
 
 import dash
 import dash_bootstrap_components as dbc
@@ -8,8 +8,10 @@ import plotly.express as px
 import plotly.graph_objects as go
 from dash import Input, Output, callback, dash_table, dcc, html
 from dash.dash_table.Format import Format, Scheme, Trim
-from sklearn.decomposition import PCA
-from sklearn.preprocessing import StandardScaler
+
+DATA_DIR = Path("data/raw")
+
+df = pd.read_parquet(DATA_DIR / "raw_data.parquet")
 
 dash.register_page(__name__, path="/eda", name="Exploratory Data Analysis (EDA)")
 
@@ -139,19 +141,11 @@ layout = html.Div(
 # ---------------------------------------------------------------------------------------
 # TABLE RAW DATA
 # ---------------------------------------------------------------------------------------
-@callback(Output("table-eda-raw-data", "children"), Input("global-df-store", "data"))
-def render_table_dataset(json_data):
-    if json_data is None:
-        return html.P("Loading data...")
-
-    data_dict = json.loads(json_data)
-
-    df = pd.DataFrame(
-        data=data_dict["data"], columns=data_dict["columns"], index=data_dict["index"]
-    )
-
+@callback(Output("table-eda-raw-data", "children"))
+def render_table_dataset():
+    df_table = df.copy()
     return dash_table.DataTable(
-        data=df.to_dict("records"),
+        data=df_table.to_dict("records"),
         columns=[
             {
                 "name": i,
@@ -159,7 +153,7 @@ def render_table_dataset(json_data):
                 "type": "numeric",
                 "format": Format(precision=2, scheme=Scheme.fixed, trim=Trim.yes),
             }
-            for i in df.columns
+            for i in df_table.columns
         ],
         page_size=8,
         sort_action="native",
@@ -184,25 +178,17 @@ def render_table_dataset(json_data):
 # ---------------------------------------------------------------------------------------
 # TABLE SUMMARY STATISTICS
 # ---------------------------------------------------------------------------------------
-@callback(Output("table-eda-stats", "children"), Input("global-df-store", "data"))
-def render_summary_stats(json_data):
-    if json_data is None:
-        return html.P("Loading data...")
+@callback(Output("table-eda-stats", "children"))
+def render_summary_stats():
 
-    data_dict = json.loads(json_data)
-
-    df = pd.DataFrame(
-        data=data_dict["data"], columns=data_dict["columns"], index=data_dict["index"]
-    )
-
-    df = df.describe()
-    df = df.reset_index()
-    df = df.rename(columns={"index": "Stat"})
-    df.Stat = df.Stat.replace(["25%", "50%", "75%"], ["q25", "median", "q75"])
-    df.Stat = df.Stat.str.upper()
+    df_sum = df.describe()
+    df_sum = df_sum.reset_index()
+    df_sum = df_sum.rename(columns={"index": "Stat"})
+    df_sum.Stat = df_sum.Stat.replace(["25%", "50%", "75%"], ["q25", "median", "q75"])
+    df_sum.Stat = df_sum.Stat.str.upper()
 
     return dash_table.DataTable(
-        data=df.to_dict("records"),
+        data=df_sum.to_dict("records"),
         columns=[
             {
                 "name": i,
@@ -210,7 +196,7 @@ def render_summary_stats(json_data):
                 "type": "numeric",
                 "format": Format(precision=2, scheme=Scheme.fixed, trim=Trim.yes),
             }
-            for i in df.columns
+            for i in df_sum.columns
         ],
         page_size=8,
         sort_action="native",
@@ -242,13 +228,8 @@ def render_summary_stats(json_data):
 # ---------------------------------------------------------------------------------------
 # DROPDOWN DATA INJECTION
 # ---------------------------------------------------------------------------------------
-@callback(Output("dropdown-scatterplot", "options"), Input("global-df-store", "data"))
-def get_columns_dropdown(json_data):
-    data_dict = json.loads(json_data)
-
-    df = pd.DataFrame(
-        data=data_dict["data"], columns=data_dict["columns"], index=data_dict["index"]
-    )
+@callback(Output("dropdown-scatterplot", "options"))
+def get_columns_dropdown():
 
     regressors = list(df.columns)
     regressors.remove("MedHouseVal")
@@ -259,17 +240,8 @@ def get_columns_dropdown(json_data):
 # ---------------------------------------------------------------------------------------
 # SCATTER PLOT REGRESSOR VS TARGET
 # ---------------------------------------------------------------------------------------
-@callback(
-    Output("plot-scatterplot", "figure"),
-    [Input("global-df-store", "data"), Input("dropdown-scatterplot", "value")],
-)
-def plot_scatter(json_data, column):
-
-    data_dict = json.loads(json_data)
-
-    df = pd.DataFrame(
-        data=data_dict["data"], columns=data_dict["columns"], index=data_dict["index"]
-    )
+@callback(Output("plot-scatterplot", "figure"), Input("dropdown-scatterplot", "value"))
+def plot_scatter(column):
 
     if column is None:
         column = "MedInc"
@@ -295,42 +267,20 @@ def plot_scatter(json_data, column):
 @callback(
     Output("plot-pca", "figure"),
     [
-        Input("global-df-store", "data"),
         Input("dropdown-pca-x", "value"),
         Input("dropdown-pca-y", "value"),
     ],
 )
-def plot_pca(json_data, pc_x, pc_y):
-    if json_data is None:
-        return go.Figure()
+def plot_pca(pc_x, pc_y):
 
-    data_dict = json.loads(json_data)
-    df = pd.DataFrame(
-        data=data_dict["data"], columns=data_dict["columns"], index=data_dict["index"]
-    )
-
-    regressors = list(df.columns)
-    if "MedHouseVal" in regressors:
-        regressors.remove("MedHouseVal")
-
-    X = df[regressors]
-    X_scaled = StandardScaler().fit_transform(X)
-
-    n_components = 4
-    pca = PCA(n_components=n_components)
-    X_pca = pca.fit_transform(X_scaled)
-    var_explicada = pca.explained_variance_ratio_ * 100
-
-    pc_map = {"PC1": 0, "PC2": 1, "PC3": 2, "PC4": 3}
-    idx_x = pc_map.get(pc_x, 0)
-    idx_y = pc_map.get(pc_y, 1)
+    df_pca = pd.read_parquet(DATA_DIR / "df_pca_train.parquet")
 
     fig = go.Figure()
 
     fig.add_trace(
         go.Scattergl(
-            x=X_pca[:, idx_x],
-            y=X_pca[:, idx_y],
+            x=df_pca[pc_x],
+            y=df_pca[pc_y],
             mode="markers",
             marker=dict(
                 color=df["MedHouseVal"],
@@ -352,8 +302,8 @@ def plot_pca(json_data, pc_x, pc_y):
 
     fig.update_layout(
         autosize=True,
-        xaxis_title=f"{pc_x} ({var_explicada[idx_x]:.1f}%)",
-        yaxis_title=f"{pc_y} ({var_explicada[idx_y]:.1f}%)",
+        xaxis_title=f"{pc_x}",
+        yaxis_title=f"{pc_y}",
         margin=dict(l=40, r=10, t=40, b=40),
         height=450,
         font=dict(family="monospace", size=10),
@@ -366,18 +316,13 @@ def plot_pca(json_data, pc_x, pc_y):
 # ---------------------------------------------------------------------------------------
 # PAIR PLOT
 # ---------------------------------------------------------------------------------------
-@callback(Output("plot-pairplot", "figure"), Input("global-df-store", "data"))
-def plot_pairplot(json_data):
+@callback(Output("plot-pairplot", "figure"))
+def plot_pairplot():
 
-    data_dict = json.loads(json_data)
+    df_mod = df.copy()
+    df_mod["MedHouseVal"] = df_mod["MedHouseVal"] * 100000
 
-    df = pd.DataFrame(
-        data=data_dict["data"], columns=data_dict["columns"], index=data_dict["index"]
-    )
-
-    df["MedHouseVal"] = df["MedHouseVal"] * 100000
-
-    regressors = list(df.columns)
+    regressors = list(df_mod.columns)
     regressors.remove("MedHouseVal")
 
     splom_hover = (
@@ -388,13 +333,13 @@ def plot_pairplot(json_data):
 
     fig = go.Figure(
         data=go.Splom(
-            dimensions=[{"label": i, "values": df[i]} for i in regressors],
+            dimensions=[{"label": i, "values": df_mod[i]} for i in regressors],
             showupperhalf=False,
             diagonal=dict(visible=False),
-            text=df["MedHouseVal"],
+            text=df_mod["MedHouseVal"],
             hovertemplate=splom_hover,
             marker=dict(
-                color=df["MedHouseVal"],
+                color=df_mod["MedHouseVal"],
                 showscale=True,
                 colorscale="plasma",
                 colorbar=dict(title="MedVal", thickness=15, len=0.7),
@@ -419,16 +364,10 @@ def plot_pairplot(json_data):
 # ---------------------------------------------------------------------------------------
 # CORRELATION MATRIX
 # ---------------------------------------------------------------------------------------
-@callback(Output("plot-corr-matrix", "figure"), Input("global-df-store", "data"))
-def plot_corr_mat(json_data):
+@callback(Output("plot-corr-matrix", "figure"))
+def plot_corr_mat():
 
-    data_dict = json.loads(json_data)
-
-    df = pd.DataFrame(
-        data=data_dict["data"], columns=data_dict["columns"], index=data_dict["index"]
-    )
-
-    df = df.corr(numeric_only=True)
+    df_corr = df.corr()
 
     matrix_hover = (
         "<b>%{y}</b><br><b>%{x}</b><br><b>Pearson Corr:</b> %{z:.3f}<extra></extra>"
@@ -437,10 +376,10 @@ def plot_corr_mat(json_data):
     fig = go.Figure()
     fig.add_trace(
         go.Heatmap(
-            x=df.columns,
-            y=df.index,
-            z=np.array(df),
-            text=df.values,
+            x=df_corr.columns,
+            y=df_corr.index,
+            z=df_corr.to_numpy(),
+            text=df_corr.values,
             texttemplate="%{text:.2f}",
             hovertemplate=matrix_hover,
             colorscale=px.colors.diverging.Picnic_r,

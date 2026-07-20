@@ -1,13 +1,19 @@
-import json
+from pathlib import Path
 
 import dash
 import dash_bootstrap_components as dbc
 import pandas as pd
 from dash import Input, Output, callback, dcc, html
 
-from src.models.knn import make_knn_regression_layout
-from src.models.linear import make_linear_regression_layout
-from src.models.poly import make_polynomial_regression_layout
+from src.plots.knn import make_knn_regression_layout
+from src.plots.linear import make_linear_regression_layout
+from src.plots.poly import make_polynomial_regression_layout
+
+DATA_DIR = Path("data/raw")
+
+df_train = pd.read_parquet(DATA_DIR / "df_pca_train.parquet")
+df_val = pd.read_parquet(DATA_DIR / "df_pca_val.parquet")
+df_test = pd.read_parquet(DATA_DIR / "df_pca_test.parquet")
 
 dash.register_page(__name__, path="/linear-models", name="Linear Model Estimation")
 
@@ -46,29 +52,10 @@ layout = html.Div(
 @callback(
     Output("layout-model-fit", "children"),
     [
-        Input("global-pca-train", "data"),
-        Input("global-pca-val", "data"),
-        Input("global-pca-test", "data"),
         Input("dropdown-model-selector", "value"),
     ],
 )
-def fit_model(df_json_train, df_json_val, df_json_test, model_type):
-
-    data_dict = json.loads(df_json_train)
-
-    df_train = pd.DataFrame(
-        data=data_dict["data"], columns=data_dict["columns"], index=data_dict["index"]
-    )
-    data_dict = json.loads(df_json_val)
-
-    df_val = pd.DataFrame(
-        data=data_dict["data"], columns=data_dict["columns"], index=data_dict["index"]
-    )
-    data_dict = json.loads(df_json_test)
-
-    df_test = pd.DataFrame(
-        data=data_dict["data"], columns=data_dict["columns"], index=data_dict["index"]
-    )
+def fit_model(model_type):
 
     match model_type:
         case 0:

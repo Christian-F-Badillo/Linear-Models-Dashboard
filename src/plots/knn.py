@@ -7,6 +7,8 @@ import plotly.graph_objects as go
 from dash import dcc, html
 from plotly.subplots import make_subplots
 
+from src.utils import load_precomputed_model
+
 
 def plot_fit(df: pd.DataFrame, data: Dict[str, Any]):
     y = df["target"].to_numpy()
@@ -275,17 +277,18 @@ def plot_importance_permutation(data=Dict[str, Any]):
 def make_knn_regression_layout(
     df_train: pd.DataFrame, df_val: pd.DataFrame, df_test: pd.DataFrame
 ) -> dbc.Container:
-    # X = df_train.drop(columns=["target"]).to_numpy()
+    DATA_PATH = "./data/model_data/"
 
     (
         train_errors,
         val_errors,
+        coefs,
         grid_params,
         metrics,
         best_params,
         test_preds,
         info,
-    ) = fit_cv(df_train=df_train, df_val=df_val, df_test=df_test)
+    ) = load_precomputed_model(model_name="knn", base_path=DATA_PATH)
 
     index_metric = np.where(grid_params["metrics"] == best_params["metrics"])[0]
 

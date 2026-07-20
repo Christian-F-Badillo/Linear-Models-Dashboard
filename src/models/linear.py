@@ -40,7 +40,7 @@ def fit_lr_ridge_cv(
         coefs[i, 1:] = model.coef_
 
     # Best Params
-    best_params = get_best_params(grid_param, val_errors)
+    best_params, best_id = get_best_params(grid_param, val_errors)
 
     best_model = Ridge(alpha=best_params["alpha"])
     best_model.fit(X_train, y_train)
@@ -48,7 +48,7 @@ def fit_lr_ridge_cv(
     y_pred_test = best_model.predict(X_test)
     metric_dict = evaluate_model(best_model, X_val, y_val, X_test, y_test)
 
-    info_plots = gen_plot_info()
+    info_plots = gen_plot_info(X_train, coefs[best_id, :])
 
     return (
         train_errors,
@@ -67,12 +67,19 @@ def get_best_params(grid_params: Dict[str, Any], errors: np.ndarray) -> Dict[str
     best_alpha_arg = np.argmin(errors)
     best_params = {"alpha": grid_params["alpha"][best_alpha_arg]}
 
-    return best_params
+    return best_params, best_alpha_arg
 
 
-def gen_plot_info():
+def gen_plot_info(X, coefs):
 
     info_plots = {}
+
+    x_support = [np.linspace(np.min(X[:, i]), np.max(X[:, i]), 100) for i in range(4)]
+
+    preds = [coefs[0] + coefs[i + 1] * x_support[i] for i in range(4)]
+
+    info_plots["pc_preds"] = preds
+    info_plots["pc_x"] = x_support
 
     return info_plots
 

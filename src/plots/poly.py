@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List
 
 import dash_bootstrap_components as dbc
 import numpy as np
@@ -6,6 +6,8 @@ import pandas as pd
 import plotly.graph_objects as go
 from dash import dcc, html
 from plotly.subplots import make_subplots
+
+from src.utils import load_precomputed_model
 
 
 def plot_fit(df: pd.DataFrame, x_support: List[Any], preds: np.ndarray):
@@ -227,14 +229,23 @@ def make_polynomial_regression_layout(
     df_train: pd.DataFrame, df_val: pd.DataFrame, df_test: pd.DataFrame
 ) -> dbc.Container:
 
-    train_errors, val_errors, coefs, grid_params, metrics, best_params, test_preds = (
-        fit_poly_ridge_cv(df_train=df_train, df_val=df_val, df_test=df_test)
-    )
+    DATA_PATH = "./data/model_data/"
 
-    index_k = np.where(grid_params["k"] == best_params["k"])[1]
+    (
+        train_errors,
+        val_errors,
+        coefs,
+        grid_params,
+        metrics,
+        best_params,
+        test_preds,
+        info_plots,
+    ) = load_precomputed_model(model_name="poly", base_path=DATA_PATH)
+
+    index_k = np.where(grid_params["k"] == best_params["k"])[0]
 
     fig1 = plot_fit(
-        df_test, x_support=x_support, coefs=coefs_model, hyper_params=best_params
+        df=df_test, x_support=info_plots["pc_x"], preds=info_plots["pc_preds"]
     )
     fig2 = plot_cv_score(
         score_train=train_errors, score_val=val_errors, param_grid=grid_params

@@ -138,6 +138,7 @@ def gen_plot_info(
     betas_full = coefs_model[1:]
 
     info_plots = {"pc_preds": []}
+    info_plots["pc_x"] = x_support
 
     for i in range(4):
         X_poly_local = np.vstack([x_support[i] ** d for d in range(1, K + 1)]).T

@@ -7,6 +7,8 @@ import plotly.graph_objects as go
 from dash import dcc, html
 from plotly.subplots import make_subplots
 
+from src.utils import load_precomputed_model
+
 
 def plot_fit(df: pd.DataFrame, x_support: List[Any], preds: List[Any]):
     y = df["target"].to_numpy()
@@ -37,7 +39,7 @@ def plot_fit(df: pd.DataFrame, x_support: List[Any], preds: List[Any]):
             row=row,
         )
         fig.add_trace(
-            go.Scatter(
+            go.Scattergl(
                 x=x_support[i],
                 y=preds[i],
                 legendgroup="model",
@@ -65,7 +67,7 @@ def plot_cv_score(
     fig = go.Figure()
 
     fig.add_trace(
-        go.Scatter(
+        go.Scattergl(
             x=alphas,
             y=score_train,
             mode="markers+lines",
@@ -74,7 +76,7 @@ def plot_cv_score(
         )
     )
     fig.add_trace(
-        go.Scatter(
+        go.Scattergl(
             x=alphas,
             y=score_val,
             mode="markers+lines",
@@ -100,7 +102,7 @@ def plot_test_predictions(df_test: pd.DataFrame, coefs: np.ndarray):
     y_true = df_test["target"]
     preds = coefs[0] + (X @ coefs[1:])
 
-    line_plot = np.arange(0, 5, 0.5)
+    line_plot = [0, 1, 2, 3, 4, 5]
     fig = go.Figure()
     fig.add_trace(
         go.Scatter(
@@ -231,26 +233,31 @@ def make_metrics_table(metrics: Dict[str, Dict[str, float]]):
 def make_linear_regression_layout(
     df_train: pd.DataFrame, df_val: pd.DataFrame, df_test: pd.DataFrame
 ) -> dbc.Container:
-    X = df_train.drop(columns=["target"]).to_numpy()
 
-    train_errors, val_errors, coef_by_alpha, alphas, metrics = fit_ridge_cv(
-        df_train=df_train, df_val=df_val, df_test=df_test
-    )
+    DATA_PATH = "./data/model_data/"
+
+    (
+        train_errors,
+        val_errors,
+        coef_by_alpha,
+        grid_params,
+        metrics,
+        best_params,
+        test_preds,
+        plot_info,
+    ) = load_precomputed_model(model_name="linear", base_path=DATA_PATH)
 
     best_fit = np.argmin(val_errors)
 
-    x_support = [np.linspace(np.min(X[:, i]), np.max(X[:, i]), 100) for i in range(4)]
-    preds = [
-        coef_by_alpha[best_fit, 0] + coef_by_alpha[best_fit, i + 1] * x_support[i]
-        for i in range(4)
-    ]
-
-    fig1 = plot_fit(df_test, x_support=x_support, preds=preds)
+    fig1 = plot_fit(df_test, x_support=plot_info["pc_x"], preds=plot_info["pc_preds"])
     fig2 = plot_cv_score(
-        score_train=train_errors, score_val=val_errors, alphas=alphas, score="RMSE"
+        score_train=train_errors,
+        score_val=val_errors,
+        alphas=grid_params["alpha"],
+        score="RMSE",
     )
     fig3 = plot_test_predictions(df_test=df_test, coefs=coef_by_alpha[best_fit, :])
-    fig4 = plot_coef_cv(coefs=coef_by_alpha, alphas=alphas)
+    fig4 = plot_coef_cv(coefs=coef_by_alpha, alphas=grid_params["alpha"])
     table_html = make_metrics_table(metrics=metrics)
 
     return dbc.Container(
